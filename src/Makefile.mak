@@ -2,7 +2,7 @@ TOPDIR = ..
 
 !INCLUDE $(TOPDIR)\win32\Make.rules.mak
 
-SUBDIRS = common scconf libsm pkcs15init libisosm libopensc pkcs11 tools tests
+SUBDIRS = common scconf libsm pkcs15init libisosm libsceac libopensc pkcs11 tools tests
 
 !IF "$(MINIDRIVER_DEF)" == "/DENABLE_MINIDRIVER"
 SUBDIRS = $(SUBDIRS) minidriver
