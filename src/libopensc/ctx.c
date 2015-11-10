@@ -295,13 +295,15 @@ static void load_reader_driver_options(sc_context_t *ctx)
 	sc_reader_t *reader;
 	int max_send_size;
 	int max_recv_size;
+	int enable_boxing;
 
 	conf_block = sc_get_conf_block(ctx, "reader_driver", driver->short_name, 1);
 
 	if (conf_block != NULL) {
 		max_send_size = scconf_get_int(conf_block, "max_send_size", -1);
 		max_recv_size = scconf_get_int(conf_block, "max_recv_size", -1);
-		if (max_send_size >= 0 || max_recv_size >= 0) {
+		enable_boxing = scconf_get_bool(conf_block, "enable_boxing", 0);
+		if (max_send_size >= 0 || max_recv_size >= 0 || enable_boxing > 0) {
 			if (list_iterator_start(&ctx->readers)) {
 				reader = list_iterator_next(&ctx->readers);
 				while (reader) {
@@ -309,6 +311,8 @@ static void load_reader_driver_options(sc_context_t *ctx)
 						reader->max_send_size = max_send_size;
 					if (max_recv_size >= 0)
 						reader->max_recv_size = max_recv_size;
+					if (enable_boxing)
+						reader->flags |= SC_READER_TEST_BOXING;
 					reader = list_iterator_next(&ctx->readers);
 				}
 				list_iterator_stop(&ctx->readers);
