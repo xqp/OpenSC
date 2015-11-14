@@ -361,7 +361,7 @@ AC_FUNC_ERROR_AT_LINE
 AC_FUNC_STAT
 AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([ \
-	getpass gettimeofday memset mkdir \
+	getpass gettimeofday getline memset mkdir \
 	strdup strerror getopt_long getopt_long_only \
 	strlcpy strlcat strnlen
 ])
@@ -760,6 +760,13 @@ if test "${enable_man}" = "yes" -o "${enable_doc}" = "yes"; then
 	AC_MSG_RESULT([ok])
 fi
 
+AC_ARG_VAR([HELP2MAN],
+           [absolute path to help2man used for man page generation of npa-tool])
+AC_PATH_PROG(HELP2MAN, help2man, not found)
+AC_ARG_VAR([GENGETOPT],
+           [absolute path to gengetopt used for command line parsing of npa-tool])
+AC_PATH_PROG(GENGETOPT, gengetopt, not found)
+
 OPENSC_FEATURES=""
 if test "${enable_thread_locking}" = "yes"; then
 	OPENSC_FEATURES="${OPENSC_FEATURES} locking"
@@ -858,6 +865,7 @@ AM_CONDITIONAL([CYGWIN], [test "${CYGWIN}" = "yes"])
 AM_CONDITIONAL([ENABLE_MINIDRIVER], [test "${enable_minidriver}" = "yes"])
 AM_CONDITIONAL([ENABLE_SM], [test "${enable_sm}" = "yes"])
 AM_CONDITIONAL([ENABLE_DNIE_UI], [test "${enable_dnie_ui}" = "yes"])
+AM_CONDITIONAL([ENABLE_NPATOOL], [test "${ENABLE_NPATOOL}" = "yes"])
 AM_CONDITIONAL([GIT_CHECKOUT], [test "${GIT_CHECKOUT}" = "yes"])
 
 if test "${enable_pedantic}" = "yes"; then
