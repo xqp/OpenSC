@@ -40,6 +40,11 @@
 #define GEMSAFE_READ_QUANTUM    248
 #define GEMSAFE_MAX_OBJLEN      28672
 
+#define GEMSAFEV1_ALG_REF_FREEFORM	0x12
+#define GEMSAFEV3_ALG_REF_FREEFORM	0x02
+#define GEMSAFEV3_ALG_REF_SHA1		0x12
+#define GEMSAFEV3_ALG_REF_SHA256	0x42
+
 int sc_pkcs15emu_gemsafeV1_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
 
 static int
@@ -581,6 +586,7 @@ sc_pkcs15emu_add_prkey(sc_pkcs15_card_t *p15card,
                 const sc_pkcs15_id_t *auth_id, int obj_flags)
 {
 	sc_pkcs15_prkey_info_t *info;
+	struct sc_supported_algo_info *token_algo = NULL;
 
 	info = calloc(1, sizeof(*info));
 	if (!info)
@@ -599,6 +605,52 @@ sc_pkcs15emu_add_prkey(sc_pkcs15_card_t *p15card,
 
 	if (path)
 		info->path = *path;
+
+	token_algo = &p15card->tokeninfo->supported_algos[0];
+
+	if (type == SC_PKCS15_TYPE_PRKEY_RSA) {
+		char pkcs_alg_ref = (card->type == SC_CARD_TYPE_GEMSAFEV1_PTEID
+			   	|| card->type == SC_CARD_TYPE_GEMSAFEV1_SEEID) ?
+			GEMSAFEV3_ALG_REF_FREEFORM : GEMSAFEV1_ALG_REF_FREEFORM;
+		token_algo->reference = &p15card->tokeninfo->supported_algos[0] - token_algo + 1;
+		token_algo->algo_ref = 0x11;
+		token_algo->mechanism = CKM_RSA_9796;
+		token_algo->operations = SC_PKCS15_ALGO_OP_COMPUTE_SIGNATURE|SC_PKCS15_ALGO_OP_DECIPHER;
+		token_algo++;
+
+		token_algo->reference = &p15card->tokeninfo->supported_algos[0] - token_algo + 1;
+		token_algo->algo_ref = pkcs_alg_ref;
+		token_algo->mechanism = CKM_RSA_PKCS;
+		token_algo->operations = SC_PKCS15_ALGO_OP_COMPUTE_SIGNATURE|SC_PKCS15_ALGO_OP_DECIPHER;
+		token_algo++;
+
+		if (card->type == SC_CARD_TYPE_GEMSAFEV1_PTEID
+				|| card->type == SC_CARD_TYPE_GEMSAFEV1_SEEID) {
+			token_algo->reference = &p15card->tokeninfo->supported_algos[0] - token_algo + 1;
+			token_algo->algo_ref = pkcs_alg_ref;
+			token_algo->mechanism = CKM_MD5_RSA_PKCS;
+			token_algo->operations = SC_PKCS15_ALGO_OP_COMPUTE_SIGNATURE|SC_PKCS15_ALGO_OP_DECIPHER;
+			token_algo++;
+
+			token_algo->reference = &p15card->tokeninfo->supported_algos[0] - token_algo + 1;
+			token_algo->algo_ref = pkcs_alg_ref;
+			token_algo->mechanism = CKM_RIPEMD160_RSA_PKCS;
+			token_algo->operations = SC_PKCS15_ALGO_OP_COMPUTE_SIGNATURE|SC_PKCS15_ALGO_OP_DECIPHER;
+			token_algo++;
+
+			token_algo->reference = &p15card->tokeninfo->supported_algos[0] - token_algo + 1;
+			token_algo->algo_ref = pkcs_alg_ref;
+			token_algo->mechanism = CKM_SHA1_RSA_PKCS;
+			token_algo->operations = SC_PKCS15_ALGO_OP_COMPUTE_SIGNATURE|SC_PKCS15_ALGO_OP_DECIPHER;
+			token_algo++;
+
+			token_algo->reference = &p15card->tokeninfo->supported_algos[0] - token_algo + 1;
+			token_algo->algo_ref = GEMSAFEV3_ALG_REF_SHA256;
+			token_algo->mechanism = CKM_SHA256_RSA_PKCS;
+			token_algo->operations = SC_PKCS15_ALGO_OP_COMPUTE_SIGNATURE;
+			token_algo++;
+		}
+	}
 
 	return sc_pkcs15emu_add_object(p15card, type, label,
 			info, auth_id, obj_flags);
