@@ -72,6 +72,7 @@ static struct sc_atr_table sc_hsm_jc_atrs[] = {
 	/* standard version */
 	{"3b:f8:13:00:00:81:31:fe:45:4a:43:4f:50:76:32:34:31:b7", NULL, NULL, SC_CARD_TYPE_SC_HSM, 0, NULL},	// JCOP 2.4.1 Default ATR contact based
 	{"3b:88:80:01:4a:43:4f:50:76:32:34:31:5e", NULL, NULL, SC_CARD_TYPE_SC_HSM, 0, NULL},	// JCOP 2.4.1 Default ATR contactless
+	{"3B:80:80:01:01", NULL, NULL, SC_CARD_TYPE_SC_HSM, 0, NULL},	// SoC Sample Card
 	{NULL, NULL, NULL, 0, 0, NULL}
 };
 
@@ -165,6 +166,36 @@ static int sc_hsm_encode_sopin(const u8 *sopin, u8 *sopinbin)
 
 
 
+static int sc_hsm_soc_biomatch(sc_card_t *card, struct sc_pin_cmd_data *data,
+			   int *tries_left)
+{
+	sc_apdu_t apdu;
+	int r;
+
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x20, 0x00, 0x85);
+	apdu.cla = 0x80;
+	apdu.data = (unsigned char*)"\x7F\x24\x00";
+	apdu.datalen = 3;
+	apdu.lc = 3;
+	apdu.resplen = 0;
+
+	r = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
+
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0x00, 0x81);
+	r = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
+
+	r =  sc_check_sw(card, apdu.sw1, apdu.sw2);
+	if (r == SC_SUCCESS) {
+		LOG_FUNC_RETURN(card->ctx, r);
+	}
+
+	LOG_FUNC_RETURN(card->ctx, SC_ERROR_PIN_CODE_INCORRECT);
+}
+
+
+
 static int sc_hsm_pin_cmd(sc_card_t *card, struct sc_pin_cmd_data *data,
 			   int *tries_left)
 {
@@ -172,6 +203,10 @@ static int sc_hsm_pin_cmd(sc_card_t *card, struct sc_pin_cmd_data *data,
 	sc_apdu_t apdu;
 	u8 cmdbuff[16];
 	int r;
+
+	if ((card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH) && (data->cmd == SC_PIN_CMD_VERIFY) && (data->pin_reference == 0x81)) {
+		return sc_hsm_soc_biomatch(card, data, tries_left);
+	}
 
 	if ((data->cmd == SC_PIN_CMD_VERIFY) && (data->pin_reference == 0x88)) {
 		if (data->pin1.len != 16)

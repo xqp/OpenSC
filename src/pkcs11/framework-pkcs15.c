@@ -955,7 +955,7 @@ pkcs15_init_slot(struct sc_pkcs15_card *p15card, struct sc_pkcs11_slot *slot,
 	if (auth != NULL)
 		slot->token_info.flags |= CKF_USER_PIN_INITIALIZED;
 
-	if (p15card->card->reader->capabilities & SC_READER_CAP_PIN_PAD)
+	if ((p15card->card->reader->capabilities & SC_READER_CAP_PIN_PAD) || (p15card->card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH))
 		slot->token_info.flags |= CKF_PROTECTED_AUTHENTICATION_PATH;
 
 	if (p15card->card->caps & SC_CARD_CAP_RNG && p15card->card->ops->get_challenge != NULL)
