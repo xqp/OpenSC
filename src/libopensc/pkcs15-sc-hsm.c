@@ -773,6 +773,7 @@ static int sc_pkcs15emu_sc_hsm_init (sc_pkcs15_card_t * p15card)
 	struct sc_app_info *appinfo;
 	struct sc_pkcs15_auth_info pin_info;
 	struct sc_pkcs15_object pin_obj;
+	struct sc_pin_cmd_data pindata;
 	u8 efbin[512];
 	u8 *ptr;
 	size_t len;
@@ -874,7 +875,6 @@ static int sc_pkcs15emu_sc_hsm_init (sc_pkcs15_card_t * p15card)
 	if (r < 0)
 		LOG_FUNC_RETURN(card->ctx, r);
 
-
 	memset(&pin_info, 0, sizeof(pin_info));
 	memset(&pin_obj, 0, sizeof(pin_obj));
 
@@ -898,6 +898,27 @@ static int sc_pkcs15emu_sc_hsm_init (sc_pkcs15_card_t * p15card)
 	r = sc_pkcs15emu_add_pin_obj(p15card, &pin_obj, &pin_info);
 	if (r < 0)
 		LOG_FUNC_RETURN(card->ctx, r);
+
+
+	memset(&pindata, 0, sizeof(pindata));
+	pindata.cmd = SC_PIN_CMD_GET_INFO;
+	pindata.pin_type = SC_AC_CHV;
+	pindata.pin_reference = 0x85;
+
+	r = sc_pin_cmd(card, &pindata, NULL);
+
+	if (r != SC_ERROR_DATA_OBJECT_NOT_FOUND)
+		card->caps |= SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH;
+
+	memset(&pindata, 0, sizeof(pindata));
+	pindata.cmd = SC_PIN_CMD_GET_INFO;
+	pindata.pin_type = SC_AC_CHV;
+	pindata.pin_reference = 0x86;
+
+	r = sc_pin_cmd(card, &pindata, NULL);
+
+	if (r != SC_ERROR_DATA_OBJECT_NOT_FOUND)
+		card->caps |= SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH;
 
 
 	filelistlength = sc_list_files(card, filelist, sizeof(filelist));
