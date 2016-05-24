@@ -39,12 +39,12 @@ all: $(TOPDIR)\win32\versioninfo.res $(TARGET)
 
 !INCLUDE $(TOPDIR)\win32\Make.rules.mak
 
-opensc.dll: $(OBJECTS) ..\scconf\scconf.lib ..\common\common.lib ..\common\libscdl.lib ..\pkcs15init\pkcs15init.lib
+opensc.dll: $(OBJECTS) ..\scconf\scconf.lib ..\common\common.lib ..\common\libscdl.lib ..\libisosm\libisosm.lib ..\libsceac\libsceac.lib ..\pkcs15init\pkcs15init.lib
 	echo LIBRARY $* > $*.def
 	echo EXPORTS >> $*.def
 	type lib$*.exports >> $*.def
-	link $(LINKFLAGS) /dll /def:$*.def /implib:$*.lib /out:opensc.dll $(OBJECTS) ..\scconf\scconf.lib ..\common\common.lib ..\common\libscdl.lib ..\pkcs15init\pkcs15init.lib $(OPENSSL_LIB) $(ZLIB_LIB) gdi32.lib advapi32.lib ws2_32.lib
+	link $(LINKFLAGS) /dll /def:$*.def /implib:$*.lib /out:opensc.dll $(OBJECTS) ..\scconf\scconf.lib ..\common\common.lib ..\common\libscdl.lib ..\libisosm\libisosm.lib ..\libsceac\libsceac.lib ..\pkcs15init\pkcs15init.lib $(OPENPACE_LIB) $(OPENSSL_LIB) $(ZLIB_LIB) gdi32.lib advapi32.lib ws2_32.lib
 	if EXIST opensc.dll.manifest mt -manifest opensc.dll.manifest -outputresource:opensc.dll;2
 
-opensc_a.lib: $(OBJECTS) ..\scconf\scconf.lib ..\common\common.lib ..\common\libscdl.lib ..\pkcs15init\pkcs15init.lib
-	lib $(LIBFLAGS) /out:opensc_a.lib $(OBJECTS) ..\scconf\scconf.lib ..\common\common.lib ..\common\libscdl.lib ..\pkcs15init\pkcs15init.lib $(ZLIB_LIB) user32.lib advapi32.lib ws2_32.lib
+opensc_a.lib: $(OBJECTS) ..\scconf\scconf.lib ..\common\common.lib ..\common\libscdl.lib ..\libisosm\libisosm.lib ..\libsceac\libsceac.lib ..\pkcs15init\pkcs15init.lib
+	lib $(LIBFLAGS) /out:opensc_a.lib $(OBJECTS) ..\scconf\scconf.lib ..\common\common.lib ..\common\libscdl.lib ..\libisosm\libisosm.lib ..\libsceac\libsceac.lib ..\pkcs15init\pkcs15init.lib $(ZLIB_LIB) user32.lib advapi32.lib ws2_32.lib
