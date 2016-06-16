@@ -60,6 +60,8 @@ typedef struct sc_hsm_private_data {
 	int noExtLength;
 	char *serialno;
 	u8 sopin[8];
+	u8 *EF_C_DevAut;
+	size_t EF_C_DevAut_len;
 } sc_hsm_private_data_t;
 
 
