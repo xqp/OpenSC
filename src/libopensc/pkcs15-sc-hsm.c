@@ -764,6 +764,7 @@ static int sc_pkcs15emu_sc_hsm_read_tokeninfo (sc_pkcs15_card_t * p15card)
 static int sc_pkcs15emu_sc_hsm_init (sc_pkcs15_card_t * p15card)
 {
 	sc_card_t *card = p15card->card;
+	sc_hsm_private_data_t *priv = (sc_hsm_private_data_t *) card->drv_data;
 	sc_file_t *file = NULL;
 	sc_path_t path;
 	u8 filelist[MAX_EXT_APDU_LENGTH];
@@ -774,7 +775,7 @@ static int sc_pkcs15emu_sc_hsm_init (sc_pkcs15_card_t * p15card)
 	struct sc_pkcs15_auth_info pin_info;
 	struct sc_pkcs15_object pin_obj;
 	struct sc_pin_cmd_data pindata;
-	u8 efbin[512];
+	u8 efbin[1024];
 	u8 *ptr;
 	size_t len;
 
@@ -803,11 +804,24 @@ static int sc_pkcs15emu_sc_hsm_init (sc_pkcs15_card_t * p15card)
 	sc_file_free(file);
 
 	/* Read device certificate to determine serial number */
-	len = sizeof efbin;
-	r = read_file(p15card, (u8 *) "\x2F\x02", efbin, &len);
-	LOG_TEST_RET(card->ctx, r, "Could not select EF.C_DevAut");
+	if (priv->EF_C_DevAut && priv->EF_C_DevAut_len) {
+		ptr = priv->EF_C_DevAut;
+		len = priv->EF_C_DevAut_len;
+	} else {
+		len = sizeof efbin;
+		r = read_file(p15card, (u8 *) "\x2F\x02", efbin, &len);
+		LOG_TEST_RET(card->ctx, r, "Could not select EF.C_DevAut");
 
-	ptr = efbin;
+		/* save EF_C_DevAut for further use */
+		ptr = realloc(priv->EF_C_DevAut, len);
+		if (ptr) {
+			memcpy(ptr, efbin, len);
+			priv->EF_C_DevAut = ptr;
+			priv->EF_C_DevAut_len = len;
+		}
+
+		ptr = efbin;
+	}
 
 	memset(&devcert, 0 ,sizeof(devcert));
 	r = sc_pkcs15emu_sc_hsm_decode_cvc(p15card, (const u8 **)&ptr, &len, &devcert);

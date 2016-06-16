@@ -507,6 +507,7 @@ static int sc_hsm_perform_chip_authentication(sc_card_t *card)
 	sc_cvc_t cvc_device, cvc_issuer;
 	/* this is only needed to call sc_pkcs15emu_sc_hsm_decode_cvc */
 	sc_pkcs15_card_t p15card;
+	sc_hsm_private_data_t *priv = (sc_hsm_private_data_t *) card->drv_data;
 	/* we know that sc_pkcs15emu_sc_hsm_decode_cvc does not require anything
 	 * else to be initialized than p15card->card */
 	p15card.card = card;
@@ -515,18 +516,33 @@ static int sc_hsm_perform_chip_authentication(sc_card_t *card)
 	memset(&cvc_issuer, 0, sizeof(cvc_issuer));
 
 
-	/* get issuer and device certificate from the card */
-	r = sc_path_set(&path, SC_PATH_TYPE_FILE_ID, (u8 *) "\x2F\x02", 2, 0, 0);
-	if (r < 0)
-		goto err;
-	r = sc_select_file(card, &path, NULL);
-	if (r < 0)
-		goto err;
-	r = sc_read_binary(card, 0, all_certs, all_certs_len, 0);
-	if (r < 0)
-		goto err;
-	all_certs_len = r;
-	cert = all_certs;
+	if (priv->EF_C_DevAut && priv->EF_C_DevAut_len) {
+		all_certs_len = priv->EF_C_DevAut_len;
+		cert = priv->EF_C_DevAut;
+	} else {
+		/* get issuer and device certificate from the card */
+		r = sc_path_set(&path, SC_PATH_TYPE_FILE_ID, (u8 *) "\x2F\x02", 2, 0, 0);
+		if (r < 0)
+			goto err;
+		r = sc_select_file(card, &path, NULL);
+		if (r < 0)
+			goto err;
+		r = sc_read_binary(card, 0, all_certs, all_certs_len, 0);
+		if (r < 0)
+			goto err;
+
+		all_certs_len = r;
+
+		/* save EF_C_DevAut for further use */
+		cert = realloc(priv->EF_C_DevAut, all_certs_len);
+		if (cert) {
+			memcpy((unsigned char *) cert, all_certs, all_certs_len);
+			priv->EF_C_DevAut = (unsigned char *) cert;
+			priv->EF_C_DevAut_len = all_certs_len;
+		}
+
+		cert = all_certs;
+	}
 	left = all_certs_len;
 
 	device_cert = cert;
@@ -1265,6 +1281,9 @@ static int sc_hsm_init(struct sc_card *card)
 		card->max_recv_size = 0;		// Card supports sending with extended length APDU and without limit
 	}
 
+	priv->EF_C_DevAut = NULL;
+	priv->EF_C_DevAut_len = 0;
+
 	return 0;
 }
 
@@ -1277,6 +1296,7 @@ static int sc_hsm_finish(sc_card_t * card)
 	if (priv->serialno) {
 		free(priv->serialno);
 	}
+	free(priv->EF_C_DevAut);
 	free(priv);
 
 #ifdef ENABLE_OPENPACE
