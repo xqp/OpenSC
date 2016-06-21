@@ -771,6 +771,11 @@ static int sc_hsm_compute_signature(sc_card_t *card,
 	apdu.lc = datalen;
 	apdu.datalen = datalen;
 	r = sc_transmit_apdu(card, &apdu);
+
+	/* only use SM for the key operation to allow subsequent calls to re-select
+	 * the Applet */
+	sc_sm_stop(card);
+
 	LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
 	if (apdu.sw1 == 0x90 && apdu.sw2 == 0x00) {
 		int len;
@@ -813,6 +818,10 @@ static int sc_hsm_decipher(sc_card_t *card, const u8 * crgram, size_t crgram_len
 	apdu.datalen = crgram_len;
 
 	r = sc_transmit_apdu(card, &apdu);
+
+	/* only use SM for the key operation to allow subsequent calls to re-select
+	 * the Applet */
+	sc_sm_stop(card);
 
 	LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
 	if (apdu.sw1 == 0x90 && apdu.sw2 == 0x00) {
