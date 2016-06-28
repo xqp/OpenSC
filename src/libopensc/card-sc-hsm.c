@@ -64,6 +64,7 @@ static struct sc_atr_table sc_hsm_atrs[] = {
 	/* standard version */
 	{"3B:FE:18:00:00:81:31:FE:45:80:31:81:54:48:53:4D:31:73:80:21:40:81:07:FA", NULL, NULL, SC_CARD_TYPE_SC_HSM, 0, NULL},
 	{"3B:8E:80:01:80:31:81:54:48:53:4D:31:73:80:21:40:81:07:18", NULL, NULL, SC_CARD_TYPE_SC_HSM, 0, NULL},
+	{"3b:89:80:01:4a:43:4f:50:32:34:32:52:33:4b", NULL, NULL, SC_CARD_TYPE_SC_HSM, 0, NULL},
 	{NULL, NULL, NULL, 0, 0, NULL}
 };
 
