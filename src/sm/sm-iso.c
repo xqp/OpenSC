@@ -24,7 +24,7 @@
 #include "sm-iso-internal.h"
 #include "libopensc/asn1.h"
 #include "libopensc/log.h"
-#include "libsm/sm-iso.h"
+#include "sm/sm-iso.h"
 #include <stdlib.h>
 #include <string.h>
 

@@ -28,7 +28,7 @@
 
 #ifdef ENABLE_OPENPACE
 #include "libopensc/sm.h"
-#include "libsm/sm-iso.h"
+#include "sm/sm-iso.h"
 #include "libsceac/sc-eac.h"
 #include <string.h>
 

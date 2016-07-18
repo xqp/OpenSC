@@ -21,7 +21,7 @@
 #include "config.h"
 #endif
 
-#include "libsm/sm-iso.h"
+#include "sm/sm-iso.h"
 #include "libopensc/asn1.h"
 #include "libopensc/log.h"
 #include "libopensc/opensc.h"
