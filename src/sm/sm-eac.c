@@ -26,7 +26,7 @@
 #include "libopensc/log.h"
 #include "libopensc/opensc.h"
 #include "rw_sfid.h"
-#include "sc-eac.h"
+#include "sm-eac.h"
 #include "sslutil.h"
 #include <stdlib.h>
 #include <string.h>

@@ -28,7 +28,7 @@
 #include "libopensc/opensc.h"
 #include "libopensc/pace.h"
 #include "libopensc/sm.h"
-#include "libsceac/sc-eac.h"
+#include "sm/sm-eac.h"
 #include <string.h>
 
 #include "../tools/fread_to_eof.c"

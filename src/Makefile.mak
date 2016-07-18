@@ -1,6 +1,6 @@
 TOPDIR = ..
 
-SUBDIRS = common scconf sm pkcs15init libsceac \
+SUBDIRS = common scconf sm pkcs15init \
 		  libopensc libcardnpa pkcs11 tools tests
 
 default: all

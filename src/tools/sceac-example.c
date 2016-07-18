@@ -29,7 +29,7 @@
 #ifdef ENABLE_OPENPACE
 #include "libopensc/sm.h"
 #include "sm/sm-iso.h"
-#include "libsceac/sc-eac.h"
+#include "sm/sm-eac.h"
 #include <string.h>
 
 static const char *newpin = NULL;
