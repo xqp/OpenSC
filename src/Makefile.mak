@@ -1,7 +1,7 @@
 TOPDIR = ..
 
 SUBDIRS = common scconf sm pkcs15init \
-		  libopensc libcardnpa pkcs11 tools tests
+		  libopensc pkcs11 tools tests
 
 default: all
 

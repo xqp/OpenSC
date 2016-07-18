@@ -4,7 +4,7 @@ MAINTAINERCLEANFILES = $(srcdir)/Makefile.in
 
 EXTRA_DIST = Makefile.mak
 
-lib_LTLIBRARIES = libopensc.la
+lib_LTLIBRARIES = libopensc.la libcardnpa.la
 noinst_HEADERS = cards.h ctbcs.h internal.h esteid.h muscle.h muscle-filesystem.h \
 	internal-winscard.h p15card-helper.h pkcs15-syn.h \
 	opensc.h pkcs15.h \
@@ -12,7 +12,7 @@ noinst_HEADERS = cards.h ctbcs.h internal.h esteid.h muscle.h muscle-filesystem.
 	errors.h types.h compression.h itacns.h iso7816.h \
 	authentic.h iasecc.h iasecc-sdo.h sm.h card-sc-hsm.h \
 	pace.h cwa14890.h cwa-dnie.h card-gids.h aux-data.h \
-	jpki.h ccid-types.h reader-boxing.h
+	jpki.h ccid-types.h reader-boxing.h card-npa.h
 
 AM_CPPFLAGS = -DOPENSC_CONF_PATH=\"$(sysconfdir)/opensc.conf\" \
 	-I$(top_srcdir)/src
@@ -69,6 +69,17 @@ libopensc_la_LDFLAGS = $(AM_LDFLAGS) \
 	-version-info @OPENSC_LT_CURRENT@:@OPENSC_LT_REVISION@:@OPENSC_LT_AGE@ \
 	-export-symbols "$(srcdir)/libopensc.exports" \
 	-no-undefined
+
+libcardnpa_la_SOURCES = card-npa.c  cardnpa.exports
+libcardnpa_la_LIBADD = $(OPENPACE_LIBS) \
+					   $(top_builddir)/src/common/libcompat.la \
+					   $(top_builddir)/src/sm/libsmeac.la \
+					   libopensc.la
+libcardnpa_la_CFLAGS = -I$(top_srcdir)/src $(OPENPACE_CFLAGS) $(OPENSSL_CFLAGS)
+libcardnpa_la_LDFLAGS = $(AM_LDFLAGS) \
+						-version-info @OPENSC_LT_CURRENT@:@OPENSC_LT_REVISION@:@OPENSC_LT_AGE@ \
+						-export-symbols "$(srcdir)/cardnpa.exports" \
+						-no-undefined
 
 if WIN32
 # def file required for MS users to build library
