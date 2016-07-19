@@ -21,7 +21,7 @@
 #include "config.h"
 #endif
 
-#include "libisosm/iso-sm.h"
+#include "libsm/sm-iso.h"
 #include "libopensc/internal.h"
 #include "libopensc/log.h"
 #include "rw_sfid.h"

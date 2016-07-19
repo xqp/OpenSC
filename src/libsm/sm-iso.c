@@ -21,10 +21,10 @@
 #include "config.h"
 #endif
 
-#include "iso-sm-internal.h"
+#include "sm-iso-internal.h"
 #include "libopensc/asn1.h"
 #include "libopensc/log.h"
-#include "libisosm/iso-sm.h"
+#include "libsm/sm-iso.h"
 #include <stdlib.h>
 #include <string.h>
 
