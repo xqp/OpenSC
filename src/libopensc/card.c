@@ -213,6 +213,7 @@ int sc_connect_card(sc_reader_t *reader, sc_card_t **card_out)
 		sc_detect_boxing_cmds(reader);
 
 	memcpy(&card->atr, &reader->atr, sizeof(card->atr));
+	memcpy(&card->uid, &reader->uid, sizeof(card->uid));
 
 	_sc_parse_atr(reader);
 
