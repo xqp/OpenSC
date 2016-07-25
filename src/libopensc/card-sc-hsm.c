@@ -557,8 +557,6 @@ static int sc_hsm_perform_chip_authentication(sc_card_t *card)
 		goto err;
 	issuer_cert_len = all_certs_len - device_cert_len - left;
 
-	EAC_init();
-
 	ctx = EAC_CTX_new();
 	if (!ctx) {
 		r = SC_ERROR_INTERNAL;
@@ -1292,6 +1290,10 @@ static int sc_hsm_init(struct sc_card *card)
 
 	priv->EF_C_DevAut = NULL;
 	priv->EF_C_DevAut_len = 0;
+
+#ifdef ENABLE_OPENPACE
+	EAC_init();
+#endif
 
 	return 0;
 }
