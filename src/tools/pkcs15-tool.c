@@ -1363,7 +1363,8 @@ static int unblock_pin(void)
 	u8 *pin, *puk;
 	int r, pinpad_present = 0;
 
-	pinpad_present = p15card->card->reader->capabilities & SC_READER_CAP_PIN_PAD;
+	pinpad_present = p15card->card->reader->capabilities & SC_READER_CAP_PIN_PAD
+	   	|| p15card->card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH;
 
 	if (!(pin_obj = get_pin_info()))
 		return 2;
@@ -1460,7 +1461,8 @@ static int change_pin(void)
 	u8 *pincode, *newpin;
 	int r, pinpad_present = 0;
 
-	pinpad_present = p15card->card->reader->capabilities & SC_READER_CAP_PIN_PAD;
+	pinpad_present = p15card->card->reader->capabilities & SC_READER_CAP_PIN_PAD
+	   	|| p15card->card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH;
 
 	if (!(pin_obj = get_pin_info()))
 		return 2;
