@@ -281,6 +281,7 @@ static int sc_hsm_soc_biomatch(sc_card_t *card, struct sc_pin_cmd_data *data,
 			   int *tries_left)
 {
 	sc_apdu_t apdu;
+	u8 rbuf[SC_MAX_APDU_BUFFER_SIZE];
 	int r;
 
 	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x20, 0x00, 0x85);
@@ -292,11 +293,16 @@ static int sc_hsm_soc_biomatch(sc_card_t *card, struct sc_pin_cmd_data *data,
 
 	r = sc_transmit_apdu(card, &apdu);
 	LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
+	/* ignore the actual status bytes */
 
-	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0x00, 0x81);
+	/* JCOP's SM accelerator is incapable of using case 1 APDU in SM */
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_2, 0x20, 0x00, 0x81);
+	apdu.resp = rbuf;
+	apdu.resplen = sizeof rbuf;
 	r = sc_transmit_apdu(card, &apdu);
 	LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
 
+	/* now check the status bytes */
 	r =  sc_check_sw(card, apdu.sw1, apdu.sw2);
 	if (r == SC_SUCCESS) {
 		LOG_FUNC_RETURN(card->ctx, r);
@@ -307,6 +313,178 @@ static int sc_hsm_soc_biomatch(sc_card_t *card, struct sc_pin_cmd_data *data,
 
 
 
+#ifdef ENABLE_OPENPACE
+#include "sm/sm-eac.h"
+#include <eac/cv_cert.h>
+#include <eac/eac.h>
+#include <eac/ta.h>
+#include <openssl/bio.h>
+#include <openssl/crypto.h>
+
+/* UTSRCACC100001 */
+static const u8 cvca[] = {
+	0x7F, 0x21, 0x82, 0x01, 0xB4, 0x7F, 0x4E, 0x82, 0x01, 0x6C, 0x5F, 0x29,
+	0x01, 0x00, 0x42, 0x0E, 0x55, 0x54, 0x53, 0x52, 0x43, 0x41, 0x43, 0x43,
+	0x31, 0x30, 0x30, 0x30, 0x30, 0x31, 0x7F, 0x49, 0x82, 0x01, 0x1D, 0x06,
+	0x0A, 0x04, 0x00, 0x7F, 0x00, 0x07, 0x02, 0x02, 0x02, 0x02, 0x03, 0x81,
+	0x20, 0xA9, 0xFB, 0x57, 0xDB, 0xA1, 0xEE, 0xA9, 0xBC, 0x3E, 0x66, 0x0A,
+	0x90, 0x9D, 0x83, 0x8D, 0x72, 0x6E, 0x3B, 0xF6, 0x23, 0xD5, 0x26, 0x20,
+	0x28, 0x20, 0x13, 0x48, 0x1D, 0x1F, 0x6E, 0x53, 0x77, 0x82, 0x20, 0x7D,
+	0x5A, 0x09, 0x75, 0xFC, 0x2C, 0x30, 0x57, 0xEE, 0xF6, 0x75, 0x30, 0x41,
+	0x7A, 0xFF, 0xE7, 0xFB, 0x80, 0x55, 0xC1, 0x26, 0xDC, 0x5C, 0x6C, 0xE9,
+	0x4A, 0x4B, 0x44, 0xF3, 0x30, 0xB5, 0xD9, 0x83, 0x20, 0x26, 0xDC, 0x5C,
+	0x6C, 0xE9, 0x4A, 0x4B, 0x44, 0xF3, 0x30, 0xB5, 0xD9, 0xBB, 0xD7, 0x7C,
+	0xBF, 0x95, 0x84, 0x16, 0x29, 0x5C, 0xF7, 0xE1, 0xCE, 0x6B, 0xCC, 0xDC,
+	0x18, 0xFF, 0x8C, 0x07, 0xB6, 0x84, 0x41, 0x04, 0x8B, 0xD2, 0xAE, 0xB9,
+	0xCB, 0x7E, 0x57, 0xCB, 0x2C, 0x4B, 0x48, 0x2F, 0xFC, 0x81, 0xB7, 0xAF,
+	0xB9, 0xDE, 0x27, 0xE1, 0xE3, 0xBD, 0x23, 0xC2, 0x3A, 0x44, 0x53, 0xBD,
+	0x9A, 0xCE, 0x32, 0x62, 0x54, 0x7E, 0xF8, 0x35, 0xC3, 0xDA, 0xC4, 0xFD,
+	0x97, 0xF8, 0x46, 0x1A, 0x14, 0x61, 0x1D, 0xC9, 0xC2, 0x77, 0x45, 0x13,
+	0x2D, 0xED, 0x8E, 0x54, 0x5C, 0x1D, 0x54, 0xC7, 0x2F, 0x04, 0x69, 0x97,
+	0x85, 0x20, 0xA9, 0xFB, 0x57, 0xDB, 0xA1, 0xEE, 0xA9, 0xBC, 0x3E, 0x66,
+	0x0A, 0x90, 0x9D, 0x83, 0x8D, 0x71, 0x8C, 0x39, 0x7A, 0xA3, 0xB5, 0x61,
+	0xA6, 0xF7, 0x90, 0x1E, 0x0E, 0x82, 0x97, 0x48, 0x56, 0xA7, 0x86, 0x41,
+	0x04, 0xA0, 0x41, 0xFE, 0xB2, 0xFD, 0x11, 0x6B, 0x2A, 0xD1, 0x9C, 0xA6,
+	0xB7, 0xEA, 0xCD, 0x71, 0xC9, 0x89, 0x2F, 0x94, 0x1B, 0xB8, 0x8D, 0x67,
+	0xDC, 0xEE, 0xC9, 0x25, 0x01, 0xF0, 0x70, 0x01, 0x19, 0x57, 0xE2, 0x21,
+	0x22, 0xBA, 0x6C, 0x2C, 0xF5, 0xFF, 0x02, 0x93, 0x6F, 0x48, 0x2E, 0x35,
+	0xA6, 0x12, 0x9C, 0xCB, 0xBA, 0x8E, 0x93, 0x83, 0x83, 0x6D, 0x31, 0x06,
+	0x87, 0x9C, 0x40, 0x8E, 0xF0, 0x87, 0x01, 0x01, 0x5F, 0x20, 0x0E, 0x55,
+	0x54, 0x53, 0x52, 0x43, 0x41, 0x43, 0x43, 0x31, 0x30, 0x30, 0x30, 0x30,
+	0x31, 0x7F, 0x4C, 0x10, 0x06, 0x0B, 0x2B, 0x06, 0x01, 0x04, 0x01, 0x81,
+	0xC3, 0x1F, 0x03, 0x01, 0x01, 0x53, 0x01, 0xC0, 0x5F, 0x25, 0x06, 0x01,
+	0x02, 0x01, 0x01, 0x00, 0x09, 0x5F, 0x24, 0x06, 0x03, 0x02, 0x01, 0x01,
+	0x00, 0x08, 0x5F, 0x37, 0x40, 0x91, 0x4D, 0xD0, 0xFA, 0x00, 0x61, 0x5C,
+	0x44, 0x04, 0x8D, 0x14, 0x67, 0x43, 0x54, 0x00, 0x42, 0x3A, 0x4A, 0xD1,
+	0xBD, 0x37, 0xFD, 0x98, 0xD6, 0xDE, 0x84, 0xFD, 0x80, 0x37, 0x48, 0x95,
+	0x82, 0x32, 0x5C, 0x72, 0x95, 0x6D, 0x4F, 0xDF, 0xAB, 0xC6, 0xED, 0xBA,
+	0x48, 0x18, 0x4A, 0x75, 0x4F, 0x37, 0xF1, 0xBE, 0x51, 0x42, 0xDD, 0x1C,
+	0x27, 0xD6, 0x65, 0x69, 0x30, 0x8C, 0xE1, 0x9A, 0xAF
+};
+
+static int sc_hsm_perform_chip_authentication(sc_card_t *card)
+{
+	int r, protocol;
+	sc_path_t path;
+	u8 all_certs[1024];
+	EAC_CTX *ctx = NULL;
+	size_t all_certs_len = sizeof all_certs, left, device_cert_len, issuer_cert_len;
+	const unsigned char *cert = all_certs, *device_cert, *issuer_cert;
+	BUF_MEM *comp_pub_key = NULL;
+	sc_cvc_t cvc_device, cvc_issuer;
+	/* this is only needed to call sc_pkcs15emu_sc_hsm_decode_cvc */
+	sc_pkcs15_card_t p15card;
+	sc_hsm_private_data_t *priv = (sc_hsm_private_data_t *) card->drv_data;
+	/* we know that sc_pkcs15emu_sc_hsm_decode_cvc does not require anything
+	 * else to be initialized than p15card->card */
+	p15card.card = card;
+
+	memset(&cvc_device, 0, sizeof(cvc_device));
+	memset(&cvc_issuer, 0, sizeof(cvc_issuer));
+
+
+	if (priv->EF_C_DevAut && priv->EF_C_DevAut_len) {
+		all_certs_len = priv->EF_C_DevAut_len;
+		cert = priv->EF_C_DevAut;
+	} else {
+		/* get issuer and device certificate from the card */
+		r = sc_path_set(&path, SC_PATH_TYPE_FILE_ID, (u8 *) "\x2F\x02", 2, 0, 0);
+		if (r < 0)
+			goto err;
+		r = sc_select_file(card, &path, NULL);
+		if (r < 0)
+			goto err;
+		r = sc_read_binary(card, 0, all_certs, all_certs_len, 0);
+		if (r < 0)
+			goto err;
+
+		all_certs_len = r;
+
+		/* save EF_C_DevAut for further use */
+		cert = realloc(priv->EF_C_DevAut, all_certs_len);
+		if (cert) {
+			memcpy((unsigned char *) cert, all_certs, all_certs_len);
+			priv->EF_C_DevAut = (unsigned char *) cert;
+			priv->EF_C_DevAut_len = all_certs_len;
+		}
+
+		cert = all_certs;
+	}
+	left = all_certs_len;
+
+	device_cert = cert;
+	r = sc_pkcs15emu_sc_hsm_decode_cvc(&p15card, &cert, &left, &cvc_device);
+	if (r < 0)
+		goto err;
+	device_cert_len = all_certs_len - left;
+
+	issuer_cert = cert;
+	r = sc_pkcs15emu_sc_hsm_decode_cvc(&p15card, &cert, &left, &cvc_issuer);
+	if (r < 0)
+		goto err;
+	issuer_cert_len = all_certs_len - device_cert_len - left;
+
+	ctx = EAC_CTX_new();
+	if (!ctx) {
+		r = SC_ERROR_INTERNAL;
+		goto err;
+	}
+
+
+	/* check all CVCs given of the document's pki */
+	if (!EAC_CTX_init_ta(ctx, NULL, 0, cvca, sizeof cvca)) {
+		r = SC_ERROR_INTERNAL;
+		goto err;
+	}
+	if (!TA_STEP2_import_certificate(ctx, issuer_cert, issuer_cert_len)
+			|| !TA_STEP2_import_certificate(ctx, device_cert, device_cert_len)) {
+		r = SC_ERROR_INTERNAL;
+		goto err;
+	}
+
+	if (card->type == SC_CARD_TYPE_SC_HSM_SOC) {
+		/* SoC cards are known to be implemented on newer JCOPs */
+		protocol = NID_id_CA_ECDH_AES_CBC_CMAC_128;
+	} else {
+		/* Older cards may not support AES accelerator */
+		protocol = NID_id_CA_ECDH_3DES_CBC_CBC;
+	}
+
+	/* initialize CA domain parameter with the document's public key */
+	if (!EAC_CTX_init_ca(ctx, protocol, 8)) {
+		r = SC_ERROR_INTERNAL;
+		goto err;
+	}
+	EVP_PKEY_free(ctx->ca_ctx->ka_ctx->key);
+	CRYPTO_add(&ctx->ta_ctx->pub_key->references, 1, CRYPTO_LOCK_EVP_PKEY);
+	ctx->ca_ctx->ka_ctx->key = ctx->ta_ctx->pub_key;
+
+	/* generate keys for CA */
+	comp_pub_key = TA_STEP3_generate_ephemeral_key(ctx);
+	r = perform_chip_authentication_ex(card, ctx,
+			cvc_device.publicPoint, cvc_device.publicPointlen);
+
+err:
+	if (r < 0)
+		EAC_CTX_clear_free(ctx);
+	if (comp_pub_key)
+		BUF_MEM_free(comp_pub_key);
+	sc_pkcs15emu_sc_hsm_free_cvc(&cvc_device);
+	sc_pkcs15emu_sc_hsm_free_cvc(&cvc_issuer);
+
+	return r;
+}
+
+#else
+
+static int sc_hsm_perform_chip_authentication(sc_card_t *card)
+{
+	return SC_ERROR_NOT_SUPPORTED;
+}
+#endif
+
+
+
 static int sc_hsm_pin_cmd(sc_card_t *card, struct sc_pin_cmd_data *data,
 			   int *tries_left)
 {
@@ -314,56 +492,120 @@ static int sc_hsm_pin_cmd(sc_card_t *card, struct sc_pin_cmd_data *data,
 	sc_apdu_t apdu;
 	u8 cmdbuff[16];
 	int r;
+	int cmd = data->cmd;
+	size_t pin2_len = data->pin2.len;
+
+	if (cmd == SC_PIN_CMD_GET_SESSION_PIN) {
+		/* First, perform a standard VERIFY */
+		data->cmd = SC_PIN_CMD_VERIFY;
+		/* we assign pin2.len to 0 early on so that in case of an error we are
+		 * not exiting with an undefined session PIN */
+		data->pin2.len = 0;
+	}
+
+	/* For contactless cards always establish a secure channel before PIN
+	 * verification */
+	if (card->type == SC_CARD_TYPE_SC_HSM_SOC
+			&& card->sm_ctx.sm_mode != SM_MODE_TRANSMIT) {
+		LOG_TEST_RET(card->ctx,
+				sc_hsm_perform_chip_authentication(card),
+				"Could not perform chip authentication");
+	}
 
 	if ((card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH)
-		   	&& (data->cmd == SC_PIN_CMD_VERIFY)
-		   	&& (data->pin_reference == 0x81)) {
-		return sc_hsm_soc_biomatch(card, data, tries_left);
-	} else if ((card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH)
 		   	&& (data->cmd == SC_PIN_CMD_CHANGE)
-		   	&& (data->pin_reference == 0x81)) {
+		   	&& (data->pin_reference == 0x81)
+			&& (!data->pin1.data || data->pin1.len <= 0)) {
 		return sc_hsm_soc_change(card, data, tries_left);
 	} else if ((card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH)
 		   	&& (data->cmd == SC_PIN_CMD_UNBLOCK)
-		   	&& (data->pin_reference == 0x81)) {
+		   	&& (data->pin_reference == 0x81)
+			&& (!data->pin1.data || data->pin1.len <= 0)) {
 		return sc_hsm_soc_unblock(card, data, tries_left);
 	}
 
-	if ((data->cmd == SC_PIN_CMD_VERIFY) && (data->pin_reference == 0x88)) {
-		if (data->pin1.len != 16)
-			return SC_ERROR_INVALID_PIN_LENGTH;
+	if ((card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH)
+			&& (data->cmd == SC_PIN_CMD_VERIFY)
+			&& (data->pin_reference == 0x81)
+			&& (!data->pin1.data || data->pin1.len <= 0)) {
+		r = sc_hsm_soc_biomatch(card, data, tries_left);
+	} else {
+		if ((data->cmd == SC_PIN_CMD_VERIFY) && (data->pin_reference == 0x88)) {
+			if (data->pin1.len != 16)
+				return SC_ERROR_INVALID_PIN_LENGTH;
 
-		// Save SO PIN for later use in sc_hsm_init_pin()
-		r = sc_hsm_encode_sopin(data->pin1.data, priv->sopin);
-		LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
+			// Save SO PIN for later use in sc_hsm_init_pin()
+			r = sc_hsm_encode_sopin(data->pin1.data, priv->sopin);
+			LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
 
-		LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+			LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+		}
+
+		if ((data->cmd == SC_PIN_CMD_CHANGE) && (data->pin_reference == 0x88)) {
+			if ((data->pin1.len != 16) || (data->pin2.len != 16))
+				return SC_ERROR_INVALID_PIN_LENGTH;
+
+			r = sc_hsm_encode_sopin(data->pin1.data, cmdbuff);
+			LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
+
+			r = sc_hsm_encode_sopin(data->pin2.data, cmdbuff + 8);
+			LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
+
+			sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x24, 0x00, data->pin_reference);
+			apdu.data = cmdbuff;
+			apdu.datalen = sizeof(cmdbuff);
+			apdu.lc = 16;
+			apdu.resplen = 0;
+			data->apdu = &apdu;
+		}
+
+		data->pin1.offset = 5;
+		data->pin1.length_offset = 4;
+		data->pin2.offset = 5;
+		data->pin2.length_offset = 4;
+
+		r = (*iso_ops->pin_cmd)(card, data, tries_left);
 	}
+	LOG_TEST_RET(card->ctx, r, "Verification failed");
 
-	if ((data->cmd == SC_PIN_CMD_CHANGE) && (data->pin_reference == 0x88)) {
-		if ((data->pin1.len != 16) || (data->pin2.len != 16))
-			return SC_ERROR_INVALID_PIN_LENGTH;
-
-		r = sc_hsm_encode_sopin(data->pin1.data, cmdbuff);
-		LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
-
-		r = sc_hsm_encode_sopin(data->pin2.data, cmdbuff + 8);
-		LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
-
-		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x24, 0x00, data->pin_reference);
-		apdu.data = cmdbuff;
-		apdu.datalen = sizeof(cmdbuff);
-		apdu.lc = 16;
-		apdu.resplen = 0;
-		data->apdu = &apdu;
+	if (cmd == SC_PIN_CMD_GET_SESSION_PIN) {
+		/* reset data->cmd to its original value */
+		data->cmd = SC_PIN_CMD_GET_SESSION_PIN;
+		if (data->pin_reference == 0x81) {
+			u8 recvbuf[SC_MAX_APDU_BUFFER_SIZE];
+			if (card->sm_ctx.sm_mode != SM_MODE_TRANSMIT) {
+				sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL,
+						"Session PIN generation only supported in SM");
+				LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+			}
+			sc_format_apdu(card, &apdu, SC_APDU_CASE_2_SHORT, 0x5A, 0x01, data->pin_reference);
+			apdu.cla = 0x80;
+			apdu.resp = recvbuf;
+			apdu.resplen = sizeof recvbuf;
+			apdu.le = 0;
+			if (sc_transmit_apdu(card, &apdu) != SC_SUCCESS
+					|| sc_check_sw(card, apdu.sw1, apdu.sw2) != SC_SUCCESS) {
+				sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL,
+						"Generating session PIN failed");
+				LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+			}
+			if (data->pin2.data && pin2_len > 0) {
+				if (pin2_len >= apdu.resplen) {
+					memcpy((unsigned char *) data->pin2.data, apdu.resp,
+							apdu.resplen);
+					data->pin2.len = apdu.resplen;
+				} else {
+					sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL,
+							"Buffer too small for session PIN");
+				}
+			}
+		} else {
+			sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL,
+					"Session PIN not supported for this PIN (0x%02X)",
+					data->pin_reference);
+		}
 	}
-
-	data->pin1.offset = 5;
-	data->pin1.length_offset = 4;
-	data->pin2.offset = 5;
-	data->pin2.length_offset = 4;
-
-	return (*iso_ops->pin_cmd)(card, data, tries_left);
+	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 }
 
 
@@ -373,6 +615,7 @@ static int sc_hsm_logout(sc_card_t * card)
 	sc_path_t path;
 	sc_hsm_private_data_t *priv = (sc_hsm_private_data_t *) card->drv_data;
 	memset(priv->sopin, 0, sizeof(priv->sopin));
+	sc_sm_stop(card);
 
 	sc_path_set(&path, SC_PATH_TYPE_DF_NAME, sc_hsm_aid.value, sc_hsm_aid.len, 0, 0);
 
@@ -567,177 +810,6 @@ static int sc_hsm_delete_file(sc_card_t *card, const sc_path_t *path)
 }
 
 
-#ifdef ENABLE_OPENPACE
-#include "sm/sm-eac.h"
-#include <eac/cv_cert.h>
-#include <eac/eac.h>
-#include <eac/ta.h>
-#include <openssl/bio.h>
-#include <openssl/crypto.h>
-
-/* UTSRCACC100001 */
-static const u8 cvca[] = {
-	0x7F, 0x21, 0x82, 0x01, 0xB4, 0x7F, 0x4E, 0x82, 0x01, 0x6C, 0x5F, 0x29,
-	0x01, 0x00, 0x42, 0x0E, 0x55, 0x54, 0x53, 0x52, 0x43, 0x41, 0x43, 0x43,
-	0x31, 0x30, 0x30, 0x30, 0x30, 0x31, 0x7F, 0x49, 0x82, 0x01, 0x1D, 0x06,
-	0x0A, 0x04, 0x00, 0x7F, 0x00, 0x07, 0x02, 0x02, 0x02, 0x02, 0x03, 0x81,
-	0x20, 0xA9, 0xFB, 0x57, 0xDB, 0xA1, 0xEE, 0xA9, 0xBC, 0x3E, 0x66, 0x0A,
-	0x90, 0x9D, 0x83, 0x8D, 0x72, 0x6E, 0x3B, 0xF6, 0x23, 0xD5, 0x26, 0x20,
-	0x28, 0x20, 0x13, 0x48, 0x1D, 0x1F, 0x6E, 0x53, 0x77, 0x82, 0x20, 0x7D,
-	0x5A, 0x09, 0x75, 0xFC, 0x2C, 0x30, 0x57, 0xEE, 0xF6, 0x75, 0x30, 0x41,
-	0x7A, 0xFF, 0xE7, 0xFB, 0x80, 0x55, 0xC1, 0x26, 0xDC, 0x5C, 0x6C, 0xE9,
-	0x4A, 0x4B, 0x44, 0xF3, 0x30, 0xB5, 0xD9, 0x83, 0x20, 0x26, 0xDC, 0x5C,
-	0x6C, 0xE9, 0x4A, 0x4B, 0x44, 0xF3, 0x30, 0xB5, 0xD9, 0xBB, 0xD7, 0x7C,
-	0xBF, 0x95, 0x84, 0x16, 0x29, 0x5C, 0xF7, 0xE1, 0xCE, 0x6B, 0xCC, 0xDC,
-	0x18, 0xFF, 0x8C, 0x07, 0xB6, 0x84, 0x41, 0x04, 0x8B, 0xD2, 0xAE, 0xB9,
-	0xCB, 0x7E, 0x57, 0xCB, 0x2C, 0x4B, 0x48, 0x2F, 0xFC, 0x81, 0xB7, 0xAF,
-	0xB9, 0xDE, 0x27, 0xE1, 0xE3, 0xBD, 0x23, 0xC2, 0x3A, 0x44, 0x53, 0xBD,
-	0x9A, 0xCE, 0x32, 0x62, 0x54, 0x7E, 0xF8, 0x35, 0xC3, 0xDA, 0xC4, 0xFD,
-	0x97, 0xF8, 0x46, 0x1A, 0x14, 0x61, 0x1D, 0xC9, 0xC2, 0x77, 0x45, 0x13,
-	0x2D, 0xED, 0x8E, 0x54, 0x5C, 0x1D, 0x54, 0xC7, 0x2F, 0x04, 0x69, 0x97,
-	0x85, 0x20, 0xA9, 0xFB, 0x57, 0xDB, 0xA1, 0xEE, 0xA9, 0xBC, 0x3E, 0x66,
-	0x0A, 0x90, 0x9D, 0x83, 0x8D, 0x71, 0x8C, 0x39, 0x7A, 0xA3, 0xB5, 0x61,
-	0xA6, 0xF7, 0x90, 0x1E, 0x0E, 0x82, 0x97, 0x48, 0x56, 0xA7, 0x86, 0x41,
-	0x04, 0xA0, 0x41, 0xFE, 0xB2, 0xFD, 0x11, 0x6B, 0x2A, 0xD1, 0x9C, 0xA6,
-	0xB7, 0xEA, 0xCD, 0x71, 0xC9, 0x89, 0x2F, 0x94, 0x1B, 0xB8, 0x8D, 0x67,
-	0xDC, 0xEE, 0xC9, 0x25, 0x01, 0xF0, 0x70, 0x01, 0x19, 0x57, 0xE2, 0x21,
-	0x22, 0xBA, 0x6C, 0x2C, 0xF5, 0xFF, 0x02, 0x93, 0x6F, 0x48, 0x2E, 0x35,
-	0xA6, 0x12, 0x9C, 0xCB, 0xBA, 0x8E, 0x93, 0x83, 0x83, 0x6D, 0x31, 0x06,
-	0x87, 0x9C, 0x40, 0x8E, 0xF0, 0x87, 0x01, 0x01, 0x5F, 0x20, 0x0E, 0x55,
-	0x54, 0x53, 0x52, 0x43, 0x41, 0x43, 0x43, 0x31, 0x30, 0x30, 0x30, 0x30,
-	0x31, 0x7F, 0x4C, 0x10, 0x06, 0x0B, 0x2B, 0x06, 0x01, 0x04, 0x01, 0x81,
-	0xC3, 0x1F, 0x03, 0x01, 0x01, 0x53, 0x01, 0xC0, 0x5F, 0x25, 0x06, 0x01,
-	0x02, 0x01, 0x01, 0x00, 0x09, 0x5F, 0x24, 0x06, 0x03, 0x02, 0x01, 0x01,
-	0x00, 0x08, 0x5F, 0x37, 0x40, 0x91, 0x4D, 0xD0, 0xFA, 0x00, 0x61, 0x5C,
-	0x44, 0x04, 0x8D, 0x14, 0x67, 0x43, 0x54, 0x00, 0x42, 0x3A, 0x4A, 0xD1,
-	0xBD, 0x37, 0xFD, 0x98, 0xD6, 0xDE, 0x84, 0xFD, 0x80, 0x37, 0x48, 0x95,
-	0x82, 0x32, 0x5C, 0x72, 0x95, 0x6D, 0x4F, 0xDF, 0xAB, 0xC6, 0xED, 0xBA,
-	0x48, 0x18, 0x4A, 0x75, 0x4F, 0x37, 0xF1, 0xBE, 0x51, 0x42, 0xDD, 0x1C,
-	0x27, 0xD6, 0x65, 0x69, 0x30, 0x8C, 0xE1, 0x9A, 0xAF
-};
-
-static int sc_hsm_perform_chip_authentication(sc_card_t *card)
-{
-	int r, protocol;
-	sc_path_t path;
-	u8 all_certs[1024];
-	EAC_CTX *ctx = NULL;
-	size_t all_certs_len = sizeof all_certs, left, device_cert_len, issuer_cert_len;
-	const unsigned char *cert = all_certs, *device_cert, *issuer_cert;
-	BUF_MEM *comp_pub_key = NULL;
-	sc_cvc_t cvc_device, cvc_issuer;
-	/* this is only needed to call sc_pkcs15emu_sc_hsm_decode_cvc */
-	sc_pkcs15_card_t p15card;
-	sc_hsm_private_data_t *priv = (sc_hsm_private_data_t *) card->drv_data;
-	/* we know that sc_pkcs15emu_sc_hsm_decode_cvc does not require anything
-	 * else to be initialized than p15card->card */
-	p15card.card = card;
-
-	memset(&cvc_device, 0, sizeof(cvc_device));
-	memset(&cvc_issuer, 0, sizeof(cvc_issuer));
-
-
-	if (priv->EF_C_DevAut && priv->EF_C_DevAut_len) {
-		all_certs_len = priv->EF_C_DevAut_len;
-		cert = priv->EF_C_DevAut;
-	} else {
-		/* get issuer and device certificate from the card */
-		r = sc_path_set(&path, SC_PATH_TYPE_FILE_ID, (u8 *) "\x2F\x02", 2, 0, 0);
-		if (r < 0)
-			goto err;
-		r = sc_select_file(card, &path, NULL);
-		if (r < 0)
-			goto err;
-		r = sc_read_binary(card, 0, all_certs, all_certs_len, 0);
-		if (r < 0)
-			goto err;
-
-		all_certs_len = r;
-
-		/* save EF_C_DevAut for further use */
-		cert = realloc(priv->EF_C_DevAut, all_certs_len);
-		if (cert) {
-			memcpy((unsigned char *) cert, all_certs, all_certs_len);
-			priv->EF_C_DevAut = (unsigned char *) cert;
-			priv->EF_C_DevAut_len = all_certs_len;
-		}
-
-		cert = all_certs;
-	}
-	left = all_certs_len;
-
-	device_cert = cert;
-	r = sc_pkcs15emu_sc_hsm_decode_cvc(&p15card, &cert, &left, &cvc_device);
-	if (r < 0)
-		goto err;
-	device_cert_len = all_certs_len - left;
-
-	issuer_cert = cert;
-	r = sc_pkcs15emu_sc_hsm_decode_cvc(&p15card, &cert, &left, &cvc_issuer);
-	if (r < 0)
-		goto err;
-	issuer_cert_len = all_certs_len - device_cert_len - left;
-
-	ctx = EAC_CTX_new();
-	if (!ctx) {
-		r = SC_ERROR_INTERNAL;
-		goto err;
-	}
-
-
-	/* check all CVCs given of the document's pki */
-	if (!EAC_CTX_init_ta(ctx, NULL, 0, cvca, sizeof cvca)) {
-		r = SC_ERROR_INTERNAL;
-		goto err;
-	}
-	if (!TA_STEP2_import_certificate(ctx, issuer_cert, issuer_cert_len)
-			|| !TA_STEP2_import_certificate(ctx, device_cert, device_cert_len)) {
-		r = SC_ERROR_INTERNAL;
-		goto err;
-	}
-
-	if (card->type == SC_CARD_TYPE_SC_HSM_SOC) {
-		/* SoC cards are known to be implemented on newer JCOPs */
-		protocol = NID_id_CA_ECDH_AES_CBC_CMAC_128;
-	} else {
-		/* Older cards may not support AES accelerator */
-		protocol = NID_id_CA_ECDH_3DES_CBC_CBC;
-	}
-
-	/* initialize CA domain parameter with the document's public key */
-	if (!EAC_CTX_init_ca(ctx, protocol, 8)) {
-		r = SC_ERROR_INTERNAL;
-		goto err;
-	}
-	EVP_PKEY_free(ctx->ca_ctx->ka_ctx->key);
-	CRYPTO_add(&ctx->ta_ctx->pub_key->references, 1, CRYPTO_LOCK_EVP_PKEY);
-	ctx->ca_ctx->ka_ctx->key = ctx->ta_ctx->pub_key;
-
-	/* generate keys for CA */
-	comp_pub_key = TA_STEP3_generate_ephemeral_key(ctx);
-	r = perform_chip_authentication_ex(card, ctx,
-			cvc_device.publicPoint, cvc_device.publicPointlen);
-
-err:
-	if (r < 0)
-		EAC_CTX_clear_free(ctx);
-	if (comp_pub_key)
-		BUF_MEM_free(comp_pub_key);
-	sc_pkcs15emu_sc_hsm_free_cvc(&cvc_device);
-	sc_pkcs15emu_sc_hsm_free_cvc(&cvc_issuer);
-
-	return r;
-}
-
-#else
-
-static int sc_hsm_perform_chip_authentication(sc_card_t *card)
-{
-	return SC_ERROR_NOT_SUPPORTED;
-}
-#endif
-
-
 static int sc_hsm_set_security_env(sc_card_t *card,
 				   const sc_security_env_t *env,
 				   int se_num)
@@ -745,13 +817,6 @@ static int sc_hsm_set_security_env(sc_card_t *card,
 	sc_hsm_private_data_t *priv = (sc_hsm_private_data_t *) card->drv_data;
 
 	priv->env = env;
-
-    if (card->sm_ctx.sm_mode != SM_MODE_TRANSMIT
-			&& card->type == SC_CARD_TYPE_SC_HSM_SOC) {
-		LOG_TEST_RET(card->ctx, 
-				sc_hsm_perform_chip_authentication(card),
-			   	"Could not perform chip authentication");
-	}
 
 	switch(env->algorithm) {
 	case SC_ALGORITHM_RSA:
@@ -896,10 +961,6 @@ static int sc_hsm_compute_signature(sc_card_t *card,
 	apdu.datalen = datalen;
 	r = sc_transmit_apdu(card, &apdu);
 
-	/* only use SM for the key operation to allow subsequent calls to re-select
-	 * the Applet */
-	sc_sm_stop(card);
-
 	LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
 	if (apdu.sw1 == 0x90 && apdu.sw2 == 0x00) {
 		int len;
@@ -942,10 +1003,6 @@ static int sc_hsm_decipher(sc_card_t *card, const u8 * crgram, size_t crgram_len
 	apdu.datalen = crgram_len;
 
 	r = sc_transmit_apdu(card, &apdu);
-
-	/* only use SM for the key operation to allow subsequent calls to re-select
-	 * the Applet */
-	sc_sm_stop(card);
 
 	LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
 	if (apdu.sw1 == 0x90 && apdu.sw2 == 0x00) {
@@ -1367,6 +1424,8 @@ static int sc_hsm_init(struct sc_card *card)
 {
 	sc_hsm_private_data_t *priv;
 	int flags,ext_flags;
+	sc_file_t *file;
+	sc_path_t path;
 
 	LOG_FUNC_CALLED(card->ctx);
 
@@ -1401,6 +1460,35 @@ static int sc_hsm_init(struct sc_card *card)
 	_sc_card_add_ec_alg(card, 320, flags, ext_flags, NULL);
 
 	card->caps |= SC_CARD_CAP_RNG|SC_CARD_CAP_APDU_EXT|SC_CARD_CAP_ISO7816_PIN_INFO;
+
+	sc_path_set(&path, SC_PATH_TYPE_DF_NAME, sc_hsm_aid.value, sc_hsm_aid.len, 0, 0);
+	if (sc_hsm_select_file_ex(card, &path, 1, &file) == SC_SUCCESS
+			&& file->prop_attr && file->prop_attr_len >= 5) {
+		static char card_name[SC_MAX_APDU_BUFFER_SIZE];
+		u8 type = file->prop_attr[2];
+		u8 major = file->prop_attr[3];
+		u8 minor = file->prop_attr[4];
+		char p00[] = "SmartCard-HSM Applet for JCOP";
+		char p01[] = "SmartCard-HSM Demo Applet for JCOP";
+		char *p = "SmartCard-HSM";
+		switch (type) {
+			case 0x00:
+				p = p00;
+				break;
+			case 0x01:
+				p = p01;
+				break;
+			default:
+				break;
+		}
+		snprintf(card_name, sizeof card_name, "%s version %u.%u", p, major, minor);
+		card->name = card_name;
+
+		if (file->prop_attr[1] & 0x04) {
+			card->caps |= SC_CARD_CAP_SESSION_PIN;
+		}
+		sc_file_free(file);
+	}
 
 	card->max_send_size = 1431;		// 1439 buffer size - 8 byte TLV because of odd ins in UPDATE BINARY
 	if (card->type == SC_CARD_TYPE_SC_HSM_SOC) {
