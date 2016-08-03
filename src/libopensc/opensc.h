@@ -334,6 +334,7 @@ typedef struct sc_reader {
 #define SC_PIN_CMD_CHANGE	1
 #define SC_PIN_CMD_UNBLOCK	2
 #define SC_PIN_CMD_GET_INFO	3
+#define SC_PIN_CMD_GET_SESSION_PIN	4
 
 #define SC_PIN_CMD_USE_PINPAD		0x0001
 #define SC_PIN_CMD_NEED_PADDING		0x0002
@@ -469,6 +470,9 @@ struct sc_reader_operations {
 
 /* Card (or card driver) supports an protected authentication mechanism */
 #define SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH	0x00000100
+
+/* Card (or card driver) supports generating a session PIN */
+#define SC_CARD_CAP_SESSION_PIN	0x00000200
 
 typedef struct sc_card {
 	struct sc_context *ctx;
