@@ -8,9 +8,12 @@ This is a fork of [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC/) that includ
   - *Initial support German ID card*:
     - Use eSign for electronic signature (PKCS#11, Minidriver, Tokend)
     - Use PIN management tool for electronic identification (eID)
-- **Better File Caching**:
-  - Use the contact-less UID allowing to cache certificates *and* metadata from the card
-  - Automatic caching with `use_file_caching = true` in `opensc.conf` allows caching during Windows login
+  - *Smartcard-HSM*:
+    - Use Manufacturer PKI for verifying the card and establishing SM
+    - Support for [Bundesdruckerei System-on-Card architecture](https://www.bundesdruckerei.de/en/3867-cebit-bundesdruckerei-exhibits-employee-id-card-tomorrow)
+- **Secure On-Card-Authentication**:
+  - Fingerprint verification on-card
+  - PIN verification on-card
 - **Generic features for easier integration of new cards**:
   - Generic Secure Messaging encoding according to ISO 7816-8
   - Secure Messaging establishment with Extended Access Control (EAC):
@@ -18,4 +21,4 @@ This is a fork of [OpenSC/OpenSC](https://github.com/OpenSC/OpenSC/) that includ
     - Terminal Authentication (TA)
     - Chip Authentication (CA)
 
-Most of the above features are still open for integration into OpenSC ([OpenSC/OpenSC#831](https://github.com/OpenSC/OpenSC/pull/831), [OpenSC/OpenSC#804](https://github.com/OpenSC/OpenSC/pull/804)). Since review cycles are long and the incentive of the project owner for integration is low, I don't expect to see them to be adopted very soon.
+Most of the above features are still open for integration into OpenSC ([OpenSC/OpenSC#831](https://github.com/OpenSC/OpenSC/pull/831)). Since review cycles are long and the incentive of the project owner for integration is low, I don't expect to see them to be adopted very soon.
