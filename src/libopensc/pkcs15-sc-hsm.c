@@ -581,7 +581,8 @@ static int sc_pkcs15emu_sc_hsm_add_prkd(sc_pkcs15_card_t * p15card, u8 keyid) {
 	struct sc_pkcs15_object prkd;
 	sc_pkcs15_prkey_info_t *key_info;
 	u8 fid[2];
-	u8 efbin[512];
+	/* enough to hold a complete certificate */
+	u8 efbin[4096];
 	u8 *ptr;
 	size_t len;
 	int r;
@@ -647,6 +648,14 @@ static int sc_pkcs15emu_sc_hsm_add_prkd(sc_pkcs15_card_t * p15card, u8 keyid) {
 	cert_info.id = key_info->id;
 	sc_path_set(&cert_info.path, SC_PATH_TYPE_FILE_ID, fid, 2, 0, 0);
 	cert_info.path.count = -1;
+	if (p15card->opts.use_file_cache) {
+		/* look this up with our AID, which should already be cached from the
+		 * call to `read_file`. This may have the side effect that OpenSC's
+		 * caching layer re-selects our applet *if the cached file cannot be
+		 * found/used* and we may loose the authentication status. We assume
+		 * that caching works perfectly without this side effect. */
+		cert_info.path.aid = sc_hsm_aid;
+	}
 
 	strlcpy(cert_obj.label, prkd.label, sizeof(cert_obj.label));
 	r = sc_pkcs15emu_add_x509_cert(p15card, &cert_obj, &cert_info);
@@ -749,7 +758,7 @@ static int sc_pkcs15emu_sc_hsm_read_tokeninfo (sc_pkcs15_card_t * p15card)
 	r = read_file(p15card, (u8 *) "\x2F\x03", efbin, &len);
 	LOG_TEST_RET(card->ctx, r, "Could not read EF.TokenInfo");
 
-	r = sc_pkcs15_parse_tokeninfo(card->ctx, p15card->tokeninfo, efbin, r);
+	r = sc_pkcs15_parse_tokeninfo(card->ctx, p15card->tokeninfo, efbin, len);
 	LOG_TEST_RET(card->ctx, r, "Could not decode EF.TokenInfo");
 
 	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
