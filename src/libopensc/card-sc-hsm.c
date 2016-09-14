@@ -78,17 +78,70 @@ static struct sc_atr_table sc_hsm_jc_atrs[] = {
 
 
 
-static int sc_hsm_select_file(sc_card_t *card,
-			       const sc_path_t *in_path,
+static int sc_hsm_is_authenticated(sc_card_t *card)
+{
+	int r;
+	sc_apdu_t apdu;
+
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0x00, 0x81);
+
+	r = sc_transmit_apdu(card, &apdu);
+	if (r < 0) {
+		return 0;
+	}
+
+	return (apdu.sw1 == 0x90) && (apdu.sw1 == 0x90);
+}
+
+
+
+static int sc_hsm_select_file_ex(sc_card_t *card,
+			       const sc_path_t *in_path, int forceselect,
 			       sc_file_t **file_out)
 {
 	int rv;
+	sc_hsm_private_data_t *priv = (sc_hsm_private_data_t *) card->drv_data;
 	sc_file_t *file = NULL;
+	sc_path_t cpath;
 
 	if (file_out == NULL) {				// Versions before 0.16 of the SmartCard-HSM do not support P2='0C'
-		rv = sc_hsm_select_file(card, in_path, &file);
+		rv = sc_hsm_select_file_ex(card, in_path, forceselect, &file);
 		if (file != NULL) {
 			sc_file_free(file);
+		}
+		return rv;
+	}
+
+	if ((in_path->type == SC_PATH_TYPE_FILE_ID) && in_path->aid.len) {
+		// Split applet selection and file selection into two separate calls
+		cpath = *in_path;
+		cpath.len = 0;
+		cpath.type = SC_PATH_TYPE_DF_NAME;
+		rv = sc_hsm_select_file_ex(card, &cpath, forceselect, NULL);
+		LOG_TEST_RET(card->ctx, rv, "Could not select SmartCard-HSM application");
+
+		if (in_path->len) {
+			cpath = *in_path;
+			cpath.aid.len = 0;
+			rv = sc_hsm_select_file_ex(card, &cpath, forceselect, file_out);
+		}
+		return rv;
+	}
+
+	// Prevent selection of applet unless this is the first time, selection is forced or the device is not authenticated
+	if (in_path->type == SC_PATH_TYPE_DF_NAME) {
+		if ((priv->dffcp == NULL) || forceselect || !sc_hsm_is_authenticated(card)) {
+			rv = (*iso_ops->select_file)(card, in_path, file_out);
+			LOG_TEST_RET(card->ctx, rv, "Could not select SmartCard-HSM application");
+
+			if (priv->dffcp != NULL) {
+				sc_file_free(priv->dffcp);
+			}
+			// Cache the FCP returned when selecting the applet
+			sc_file_dup(&priv->dffcp, *file_out);
+		} else {
+			sc_file_dup(file_out, priv->dffcp);
+			rv = SC_SUCCESS;
 		}
 		return rv;
 	}
@@ -111,6 +164,15 @@ static int sc_hsm_select_file(sc_card_t *card,
 
 
 
+static int sc_hsm_select_file(sc_card_t *card,
+			       const sc_path_t *in_path,
+			       sc_file_t **file_out)
+{
+	return sc_hsm_select_file_ex(card, in_path, 0, file_out);
+}
+
+
+
 static int sc_hsm_match_card(struct sc_card *card)
 {
 	sc_path_t path;
@@ -125,7 +187,7 @@ static int sc_hsm_match_card(struct sc_card *card)
 		return 0;
 
 	sc_path_set(&path, SC_PATH_TYPE_DF_NAME, sc_hsm_aid.value, sc_hsm_aid.len, 0, 0);
-	r = sc_hsm_select_file(card, &path, NULL);
+	r = (*iso_ops->select_file)(card, &path, NULL);
 	LOG_TEST_RET(card->ctx, r, "Could not select SmartCard-HSM application");
 
 	// Select Applet to be sure
@@ -331,7 +393,7 @@ static int sc_hsm_logout(sc_card_t * card)
 
 	sc_path_set(&path, SC_PATH_TYPE_DF_NAME, sc_hsm_aid.value, sc_hsm_aid.len, 0, 0);
 
-	return sc_hsm_select_file(card, &path, NULL);
+	return sc_hsm_select_file_ex(card, &path, 1, NULL);
 }
 
 
@@ -1382,6 +1444,9 @@ static int sc_hsm_finish(sc_card_t * card)
 	sc_sm_stop(card);
 	if (priv->serialno) {
 		free(priv->serialno);
+	}
+	if (priv->dffcp) {
+		sc_file_free(priv->dffcp);
 	}
 	free(priv->EF_C_DevAut);
 	free(priv);
