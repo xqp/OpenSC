@@ -90,7 +90,7 @@ static int sc_hsm_is_authenticated(sc_card_t *card)
 		return 0;
 	}
 
-	return (apdu.sw1 == 0x90) && (apdu.sw1 == 0x90);
+	return (apdu.sw1 == 0x90) && (apdu.sw2 == 0x00);
 }
 
 
