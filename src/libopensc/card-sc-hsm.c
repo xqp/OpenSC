@@ -78,23 +78,6 @@ static struct sc_atr_table sc_hsm_jc_atrs[] = {
 
 
 
-static int sc_hsm_is_authenticated(sc_card_t *card)
-{
-	int r;
-	sc_apdu_t apdu;
-
-	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0x00, 0x81);
-
-	r = sc_transmit_apdu(card, &apdu);
-	if (r < 0) {
-		return 0;
-	}
-
-	return (apdu.sw1 == 0x90) && (apdu.sw2 == 0x00);
-}
-
-
-
 static int sc_hsm_select_file_ex(sc_card_t *card,
 			       const sc_path_t *in_path, int forceselect,
 			       sc_file_t **file_out)
@@ -130,7 +113,7 @@ static int sc_hsm_select_file_ex(sc_card_t *card,
 
 	// Prevent selection of applet unless this is the first time, selection is forced or the device is not authenticated
 	if (in_path->type == SC_PATH_TYPE_DF_NAME) {
-		if ((priv->dffcp == NULL) || forceselect || !sc_hsm_is_authenticated(card)) {
+		if ((priv->dffcp == NULL) || forceselect) {
 			rv = (*iso_ops->select_file)(card, in_path, file_out);
 			LOG_TEST_RET(card->ctx, rv, "Could not select SmartCard-HSM application");
 
