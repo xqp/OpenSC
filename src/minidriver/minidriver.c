@@ -243,6 +243,11 @@ static DWORD md_get_cardcf(PCARD_DATA pCardData, CARD_CACHE_FILE_FORMAT **out);
 static DWORD md_pkcs15_delete_object(PCARD_DATA pCardData, struct sc_pkcs15_object *obj);
 static DWORD md_fs_init(PCARD_DATA pCardData);
 
+#if defined(__GNUC__)
+static void logprintf(PCARD_DATA pCardData, int level, const char* format, ...)
+	__attribute__ ((format (SC_PRINTF_FORMAT, 3, 4)));
+#endif
+
 static void logprintf(PCARD_DATA pCardData, int level, _Printf_format_string_ const char* format, ...)
 {
 	va_list arg;
