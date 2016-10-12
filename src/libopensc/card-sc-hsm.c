@@ -491,6 +491,7 @@ static int sc_hsm_pin_cmd(sc_card_t *card, struct sc_pin_cmd_data *data,
 	sc_hsm_private_data_t *priv = (sc_hsm_private_data_t *) card->drv_data;
 	sc_apdu_t apdu;
 	u8 cmdbuff[16];
+	u8 rbuf[SC_MAX_APDU_BUFFER_SIZE];
 	int r;
 	int cmd = data->cmd;
 	size_t pin2_len = data->pin2.len;
@@ -556,6 +557,15 @@ static int sc_hsm_pin_cmd(sc_card_t *card, struct sc_pin_cmd_data *data,
 			apdu.datalen = sizeof(cmdbuff);
 			apdu.lc = 16;
 			apdu.resplen = 0;
+			data->apdu = &apdu;
+		}
+
+		if ((data->cmd == SC_PIN_CMD_GET_INFO)
+				&& (card->sm_ctx.sm_mode == SM_MODE_TRANSMIT)) {
+			/* JCOP's SM accelerator is incapable of using case 1 APDU in SM */
+			sc_format_apdu(card, &apdu, SC_APDU_CASE_2, 0x20, 0x00, data->pin_reference);
+			apdu.resp = rbuf;
+			apdu.resplen = sizeof rbuf;
 			data->apdu = &apdu;
 		}
 
