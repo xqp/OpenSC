@@ -210,6 +210,25 @@ static int sc_hsm_encode_sopin(const u8 *sopin, u8 *sopinbin)
 }
 
 
+static int sc_hsm_soc_select_minbioclient(sc_card_t *card)
+{
+	sc_apdu_t apdu;
+	struct sc_aid minBioClient_aid = {
+		{ 0xFF,'m','i','n','B','i','o','C','l','i','e','n','t',0x01 }, 14
+	};
+
+	/* Select MinBioClient */
+	sc_sm_stop(card);
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0xA4, 0x04, 0x0C);
+	apdu.data = minBioClient_aid.value;
+	apdu.datalen = minBioClient_aid.len;
+	apdu.lc = minBioClient_aid.len;
+	LOG_TEST_RET(card->ctx,
+			sc_transmit_apdu(card, &apdu),
+			"APDU transmit failed");
+
+	return sc_check_sw(card, apdu.sw1, apdu.sw2);
+}
 
 static int sc_hsm_soc_change(sc_card_t *card, struct sc_pin_cmd_data *data,
 			   int *tries_left)
@@ -217,31 +236,33 @@ static int sc_hsm_soc_change(sc_card_t *card, struct sc_pin_cmd_data *data,
 	sc_apdu_t apdu;
 	sc_path_t path;
 	int r;
-	struct sc_aid minBioClient_aid = { { 0xFF,'m','i','n','B','i','o','C','l','i','e','n','t',0x01 }, 14 };
 
 	/* Select MinBioClient */
-	sc_path_set(&path, SC_PATH_TYPE_DF_NAME, minBioClient_aid.value, minBioClient_aid.len, 0, 0);
-	r = sc_hsm_select_file(card, &path, NULL);
+	r = sc_hsm_soc_select_minbioclient(card);
 	LOG_TEST_RET(card->ctx, r, "Could not select MinBioClient application");
 
 	/* verify PIN */
 	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0x00, 0x80);
 	r = sc_transmit_apdu(card, &apdu);
-	if (r == SC_SUCCESS) {
-		if (SC_SUCCESS == sc_check_sw(card, apdu.sw1, apdu.sw2)) {
-			/* change PIN */
-			sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x24, 0x01, 0x80);
-			r = sc_transmit_apdu(card, &apdu);
-		}
-	}
+	LOG_TEST_GOTO_ERR(card->ctx, r, "APDU transmit failed");
+	r = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_GOTO_ERR(card->ctx, r, "Could not verify PIN");
 
+	/* change PIN */
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x24, 0x01, 0x80);
+	r = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_GOTO_ERR(card->ctx, r, "APDU transmit failed");
+	r = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_GOTO_ERR(card->ctx, r, "Could not change PIN");
+
+err:
 	/* Select SC-HSM */
 	sc_path_set(&path, SC_PATH_TYPE_DF_NAME, sc_hsm_aid.value, sc_hsm_aid.len, 0, 0);
-	LOG_TEST_RET(card->ctx, sc_hsm_select_file(card, &path, NULL), "Could not select SmartCard-HSM application");
+	LOG_TEST_RET(card->ctx,
+			sc_hsm_select_file_ex(card, &path, 1, NULL),
+			"Could not select SmartCard-HSM application");
 
-	LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
-
-	return sc_check_sw(card, apdu.sw1, apdu.sw2);
+	return r;
 }
 
 static int sc_hsm_soc_unblock(sc_card_t *card, struct sc_pin_cmd_data *data,
@@ -250,31 +271,33 @@ static int sc_hsm_soc_unblock(sc_card_t *card, struct sc_pin_cmd_data *data,
 	sc_apdu_t apdu;
 	sc_path_t path;
 	int r;
-	struct sc_aid minBioClient_aid = { { 0xFF,'m','i','n','B','i','o','C','l','i','e','n','t',0x01 }, 14 };
 
 	/* Select MinBioClient */
-	sc_path_set(&path, SC_PATH_TYPE_DF_NAME, minBioClient_aid.value, minBioClient_aid.len, 0, 0);
-	r = sc_hsm_select_file(card, &path, NULL);
+	r = sc_hsm_soc_select_minbioclient(card);
 	LOG_TEST_RET(card->ctx, r, "Could not select MinBioClient application");
 
 	/* verify PUK */
 	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0x00, 0x81);
 	r = sc_transmit_apdu(card, &apdu);
-	if (r == SC_SUCCESS) {
-		if (SC_SUCCESS == sc_check_sw(card, apdu.sw1, apdu.sw2)) {
-			/* reset retry counter */
-			sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x2c, 0x03, 0x00);
-			r = sc_transmit_apdu(card, &apdu);
-		}
-	}
+	LOG_TEST_GOTO_ERR(card->ctx, r, "APDU transmit failed");
+	r = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_GOTO_ERR(card->ctx, r, "Could not verify PUK");
 
+	/* reset retry counter */
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x2c, 0x03, 0x00);
+	r = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_GOTO_ERR(card->ctx, r, "APDU transmit failed");
+	r = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_GOTO_ERR(card->ctx, r, "Could not unblock PIN");
+
+err:
 	/* Select SC-HSM */
 	sc_path_set(&path, SC_PATH_TYPE_DF_NAME, sc_hsm_aid.value, sc_hsm_aid.len, 0, 0);
-	LOG_TEST_RET(card->ctx, sc_hsm_select_file(card, &path, NULL), "Could not select SmartCard-HSM application");
+	LOG_TEST_RET(card->ctx,
+			sc_hsm_select_file_ex(card, &path, 1, NULL),
+			"Could not select SmartCard-HSM application");
 
-	LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
-
-	return sc_check_sw(card, apdu.sw1, apdu.sw2);
+	return r;
 }
 
 static int sc_hsm_soc_biomatch(sc_card_t *card, struct sc_pin_cmd_data *data,
@@ -504,15 +527,6 @@ static int sc_hsm_pin_cmd(sc_card_t *card, struct sc_pin_cmd_data *data,
 		data->pin2.len = 0;
 	}
 
-	/* For contactless cards always establish a secure channel before PIN
-	 * verification */
-	if (card->type == SC_CARD_TYPE_SC_HSM_SOC
-			&& card->sm_ctx.sm_mode != SM_MODE_TRANSMIT) {
-		LOG_TEST_RET(card->ctx,
-				sc_hsm_perform_chip_authentication(card),
-				"Could not perform chip authentication");
-	}
-
 	if ((card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH)
 		   	&& (data->cmd == SC_PIN_CMD_CHANGE)
 		   	&& (data->pin_reference == 0x81)
@@ -523,6 +537,16 @@ static int sc_hsm_pin_cmd(sc_card_t *card, struct sc_pin_cmd_data *data,
 		   	&& (data->pin_reference == 0x81)
 			&& (!data->pin1.data || data->pin1.len <= 0)) {
 		return sc_hsm_soc_unblock(card, data, tries_left);
+	}
+
+	/* For contactless cards always establish a secure channel before PIN
+	 * verification */
+	if (card->type == SC_CARD_TYPE_SC_HSM_SOC
+			&& (data->cmd != SC_PIN_CMD_GET_INFO)
+			&& card->sm_ctx.sm_mode != SM_MODE_TRANSMIT) {
+		LOG_TEST_RET(card->ctx,
+				sc_hsm_perform_chip_authentication(card),
+				"Could not perform chip authentication");
 	}
 
 	if ((card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH)

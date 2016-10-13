@@ -1468,7 +1468,8 @@ pkcs15_login(struct sc_pkcs11_slot *slot, CK_USER_TYPE userType,
 	if (pin_info->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN)
 		return CKR_FUNCTION_REJECTED;
 
-	if (p11card->card->reader->capabilities & SC_READER_CAP_PIN_PAD) {
+	if (p11card->card->reader->capabilities & SC_READER_CAP_PIN_PAD
+			|| (p15card->card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH)) {
 		/* pPin should be NULL in case of a pin pad reader, but
 		 * some apps (e.g. older Netscapes) don't know about it.
 		 * So we don't require that pPin == NULL, but set it to
@@ -1633,7 +1634,8 @@ pkcs15_change_pin(struct sc_pkcs11_slot *slot,
 		return CKR_USER_PIN_NOT_INITIALIZED;
 
 	sc_log(context, "Change '%.*s' (ref:%i,type:%i)", (int) sizeof pin_obj->label, pin_obj->label, auth_info->attrs.pin.reference, login_user);
-	if (p11card->card->reader->capabilities & SC_READER_CAP_PIN_PAD) {
+	if ((p11card->card->reader->capabilities & SC_READER_CAP_PIN_PAD)
+			|| (p15card->card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH)) {
 		/* pPin should be NULL in case of a pin pad reader, but
 		 * some apps (e.g. older Netscapes) don't know about it.
 		 * So we don't require that pPin == NULL, but set it to
