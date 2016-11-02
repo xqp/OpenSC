@@ -47,9 +47,7 @@ matrix:
 
 before_script:
   - if [ $TRAVIS_OS_NAME == osx ]; then
-      git clone -q --depth=1 git://git.savannah.gnu.org/gengetopt.git &&
-      cd gengetopt && autoreconf -si && ./configure --prefix=/tmp && make install && cd .. &&
-      export GENGETOPT=/tmp/bin/gengetopt;
+      brew install gengetopt help2man;
     fi
   - ./bootstrap
   - if [ -z "$HOST" ]; then
