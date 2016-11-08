@@ -344,3 +344,17 @@ _sc_card_add_ec_alg
 _sc_card_add_rsa_alg
 _sc_match_atr
 _sc_log
+npa_secret_name
+get_pace_capabilities
+perform_pace
+perform_terminal_authentication
+perform_chip_authentication
+npa_default_flags
+npa_reset_retry_counter
+npa_pace_get_tries_left
+boxing_pace_input_to_buf
+boxing_buf_to_pace_input
+boxing_pace_output_to_buf
+boxing_buf_to_pace_output
+boxing_pace_capabilities_to_buf
+boxing_buf_to_pace_capabilities
