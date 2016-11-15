@@ -772,11 +772,13 @@ int sc_context_create(sc_context_t **ctx_out, const sc_context_param_t *parm)
 	sc_log(ctx, "opensc version: %s", sc_get_version());
 
 #ifdef ENABLE_PCSC
-	ctx->reader_driver = sc_get_pcsc_driver();
-/* XXX: remove cardmod pseudoreader driver */
 #ifdef ENABLE_MINIDRIVER
 	if(strcmp(ctx->app_name, "cardmod") == 0)
 		ctx->reader_driver = sc_get_cardmod_driver();
+	else
+		ctx->reader_driver = sc_get_pcsc_driver();
+#else
+	ctx->reader_driver = sc_get_pcsc_driver();
 #endif
 #elif defined(ENABLE_CTAPI)
 	ctx->reader_driver = sc_get_ctapi_driver();
