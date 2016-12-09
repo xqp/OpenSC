@@ -24,7 +24,7 @@
 #ifdef ENABLE_OPENPACE
 #include "npa-tool-cmdline.h"
 #include "fread_to_eof.h"
-#include "sm/rw_sfid.h"
+#include "sm/rw_sfid.c"
 #include "sm/sslutil.h"
 #include "sm/sm-eac.h"
 #include <eac/pace.h>
@@ -36,6 +36,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <openssl/asn1t.h>
+
+#define ASN1_APP_IMP_OPT(stname, field, type, tag) ASN1_EX_TYPE(ASN1_TFLG_IMPTAG|ASN1_TFLG_APPLICATION|ASN1_TFLG_OPTIONAL, tag, stname, field, type)
+#define ASN1_APP_IMP(stname, field, type, tag) ASN1_EX_TYPE(ASN1_TFLG_IMPTAG|ASN1_TFLG_APPLICATION, tag, stname, field, type)
+
+/* 0x67
+ * Auxiliary authenticated data */
+ASN1_ITEM_TEMPLATE(ASN1_AUXILIARY_DATA) = 
+	ASN1_EX_TEMPLATE_TYPE(
+			ASN1_TFLG_SEQUENCE_OF|ASN1_TFLG_IMPTAG|ASN1_TFLG_APPLICATION,
+			7, AuxiliaryAuthenticatedData, CVC_DISCRETIONARY_DATA_TEMPLATE)
+ASN1_ITEM_TEMPLATE_END(ASN1_AUXILIARY_DATA)
+IMPLEMENT_ASN1_FUNCTIONS(ASN1_AUXILIARY_DATA)
 
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
